@@ -1,0 +1,20 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it } from 'vitest'
+import { store } from './storage'
+import { defaultSettings } from '../types'
+describe('storage web contract', () => {
+  beforeEach(async () => { localStorage.clear(); await store.init() })
+  it('persists every MVP entity and updates messages', async () => { const now = Date.now(); await store.saveCharacter({ id: 'c', name: 'Luna', data: { name: 'Luna', description: '', personality: '', scenario: '', first_mes: '', mes_example: '' }, rawCard: {}, createdAt: now, updatedAt: now }); await store.savePersona({ id: 'p', name: 'Kai', description: 'Traveler', isDefault: true }); await store.savePreset({ id: 'r', name: 'Short', systemPrompt: 'Brief', temperature: .4, maxTokens: 200, contextTokens: 4096 }); await store.saveSession({ id: 's', characterId: 'c', title: 'Luna', createdAt: now, updatedAt: now }); await store.saveMessage({ id: 'm', sessionId: 's', role: 'user', content: 'Hello', createdAt: now, updatedAt: now }); await store.saveMessage({ id: 'm', sessionId: 's', role: 'user', content: 'Edited', createdAt: now, updatedAt: now + 1 }); await store.saveSettings({ ...defaultSettings, model: 'deepseek-reasoner' }); const s = await store.snapshot(); expect(s.characters[0].name).toBe('Luna'); expect(s.personas.find(x => x.id === 'p')?.isDefault).toBe(true); expect(s.presets[0].name).toBe('Short'); expect(s.sessions[0].characterId).toBe('c'); expect(s.messages).toHaveLength(1); expect(s.settings.model).toBe('deepseek-reasoner') })
+  it('cascades character conversations while preserving unrelated data', async () => { const now = Date.now(), character = (id: string) => ({ id, name: id, data: { name: id, description: '', personality: '', scenario: '', first_mes: '', mes_example: '' }, rawCard: {}, createdAt: now, updatedAt: now }); await store.saveCharacter(character('a')); await store.saveCharacter(character('b')); await store.saveSession({ id: 'sa', characterId: 'a', title: 'a', createdAt: now, updatedAt: now }); await store.saveSession({ id: 'sb', characterId: 'b', title: 'b', createdAt: now, updatedAt: now }); await store.saveMessage({ id: 'ma', sessionId: 'sa', role: 'user', content: 'a', createdAt: now, updatedAt: now }); await store.saveMessage({ id: 'mb', sessionId: 'sb', role: 'user', content: 'b', createdAt: now, updatedAt: now }); await store.deleteCharacter('a'); const s = await store.snapshot(); expect(s.characters.map(x => x.id)).toEqual(['b']); expect(s.sessions.map(x => x.id)).toEqual(['sb']); expect(s.messages.map(x => x.id)).toEqual(['mb']) })
+  it('keeps one default persona', async () => { await store.savePersona({ id: 'p2', name: 'Second', description: '', isDefault: true }); let s = await store.snapshot(); expect(s.personas.filter(x => x.isDefault).map(x => x.id)).toEqual(['p2']); await store.deletePersona('p2'); s = await store.snapshot(); expect(s.personas[0].isDefault).toBe(true); await expect(store.deletePersona(s.personas[0].id)).rejects.toThrow('至少保留') })
+  it('rolls a session back without touching other conversations', async () => {
+    const now = Date.now()
+    await store.saveSession({ id: 'first', characterId: 'c', title: 'First', createdAt: now, updatedAt: now })
+    await store.saveSession({ id: 'second', characterId: 'c', title: 'Second', createdAt: now, updatedAt: now })
+    for (const [id, sessionId] of [['one', 'first'], ['two', 'first'], ['three', 'first'], ['other', 'second']] as const) await store.saveMessage({ id, sessionId, role: 'user', content: id, createdAt: now, updatedAt: now })
+    await store.rollbackSession('first', ['two', 'three'])
+    const s = await store.snapshot()
+    expect(s.messages.map(x => x.id).sort()).toEqual(['one', 'other'])
+  })
+  it('excludes the API key from domain persistence', async () => { await store.setApiKey('secret-test-key'); expect(JSON.stringify(await store.snapshot())).not.toContain('secret-test-key'); expect(await store.getApiKey()).toBe('secret-test-key') })
+})
