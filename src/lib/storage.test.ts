@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { store } from './storage'
 import { defaultSettings } from '../types'
 describe('storage web contract', () => {
@@ -16,6 +16,37 @@ describe('storage web contract', () => {
     await store.rollbackSession('first', ['two', 'three'])
     const s = await store.snapshot()
     expect(s.messages.map(x => x.id).sort()).toEqual(['one', 'other'])
+  })
+  it('round-trips world book data without exporting the API key', async () => {
+    const now = Date.now()
+    await store.saveWorldBookEntry({ id: 'moon', name: '月港', keywords: ['moon'], content: '潮汐设定', priority: 3, enabled: false, characterIds: ['luna'], createdAt: now, updatedAt: now })
+    await store.setApiKey('secret-test-key')
+    const exported = await store.exportWorldBook()
+    expect(exported).toContain('月港')
+    expect(exported).not.toContain('secret-test-key')
+    localStorage.clear()
+    await store.init()
+    const result = await store.importWorldBook(exported)
+    const s = await store.snapshot()
+    expect(result).toEqual({ imported: 1, remappedIds: 0 })
+    expect(s.worldBookEntries).toMatchObject([{ id: 'moon', characterIds: ['luna'], enabled: false, priority: 3 }])
+  })
+  it('does not partially write a world book import that fails validation', async () => {
+    const now = Date.now()
+    await store.saveWorldBookEntry({ id: 'existing', name: 'Existing', keywords: ['existing'], content: 'kept', priority: 1, enabled: true, characterIds: [], createdAt: now, updatedAt: now })
+    const before = await store.snapshot()
+    const invalid = JSON.stringify({ format: 'pocket-tavern.world-book', version: 1, entries: [{ id: 'new', content: 'would not persist' }, { id: 'bad', priority: 'high' }] })
+    await expect(store.importWorldBook(invalid)).rejects.toThrow('priority')
+    expect(await store.snapshot()).toEqual(before)
+  })
+  it('keeps the previous web snapshot when persistence itself fails', async () => {
+    const now = Date.now()
+    await store.saveWorldBookEntry({ id: 'existing', name: 'Existing', keywords: ['existing'], content: 'kept', priority: 1, enabled: true, characterIds: [], createdAt: now, updatedAt: now })
+    const before = await store.snapshot()
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage quota') })
+    await expect(store.importWorldBook(JSON.stringify({ format: 'pocket-tavern.world-book', version: 1, entries: [{ id: 'new', content: 'would not persist' }] }))).rejects.toThrow('storage quota')
+    setItem.mockRestore()
+    expect(await store.snapshot()).toEqual(before)
   })
   it('excludes the API key from domain persistence', async () => { await store.setApiKey('secret-test-key'); expect(JSON.stringify(await store.snapshot())).not.toContain('secret-test-key'); expect(await store.getApiKey()).toBe('secret-test-key') })
 })

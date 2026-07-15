@@ -1,9 +1,10 @@
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
-import { Directory, Filesystem } from '@capacitor/filesystem'
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
 import type { AppSettings, Character, ChatMessage, ChatSession, Persona, Preset, WorldBookEntry } from '../types'
 import { defaultSettings } from '../types'
+import { parseWorldBookExport, stringifyWorldBookExport } from './worldbook'
 
 export interface Snapshot { characters: Character[]; personas: Persona[]; presets: Preset[]; worldBookEntries: WorldBookEntry[]; sessions: ChatSession[]; messages: ChatMessage[]; settings: AppSettings }
 export const emptySnapshot = (): Snapshot => ({ characters: [], personas: [{ id: 'default', name: 'User', description: '', isDefault: true }], presets: [], worldBookEntries: [], sessions: [], messages: [], settings: { ...defaultSettings } })
@@ -12,6 +13,7 @@ let web = emptySnapshot()
 const native = Capacitor.isNativePlatform()
 const KEY = 'pocket-tavern-data-v2'
 const OLD_KEY = 'pocket-tavern-data-v1'
+const WORLD_BOOK_EXPORT_NAME = 'pocket-tavern-world-book.json'
 const payloads = async <T>(table: string, order = ''): Promise<T[]> => ((await db!.query(`SELECT payload FROM ${table} ${order}`)).values || []).map(row => JSON.parse(row.payload))
 
 async function snapshot(): Promise<Snapshot> {
@@ -24,7 +26,7 @@ async function snapshot(): Promise<Snapshot> {
   return { characters, personas: personas.length ? personas : emptySnapshot().personas, presets, worldBookEntries, sessions, messages, settings: settingRows[0] || { ...defaultSettings } }
 }
 
-async function webPersist(s: Snapshot) { web = structuredClone(s); localStorage.setItem(KEY, JSON.stringify(web)) }
+async function webPersist(s: Snapshot) { const next = structuredClone(s); localStorage.setItem(KEY, JSON.stringify(next)); web = next }
 async function upsert(table: string, id: string, value: unknown, extraColumns = '', extraValues: unknown[] = []) {
   const columns = extraColumns ? `,${extraColumns}` : '', marks = extraValues.map(() => '?').join(',')
   const valueMarks = marks ? `,${marks}` : ''
@@ -82,6 +84,31 @@ export const store = {
   async deletePreset(id: string) { if (native) await db!.run('DELETE FROM presets WHERE id=?', [id]); else { const s = await snapshot(); s.presets = s.presets.filter(x => x.id !== id); await webPersist(s) } },
   async saveWorldBookEntry(x: WorldBookEntry) { if (native) await upsert('world_book_entries', x.id, x, 'priority,created_at', [x.priority, x.createdAt]); else { const s = await snapshot(); const i = s.worldBookEntries.findIndex(v => v.id === x.id); if (i < 0) s.worldBookEntries.push(x); else s.worldBookEntries[i] = x; await webPersist(s) } },
   async deleteWorldBookEntry(id: string) { if (native) await db!.run('DELETE FROM world_book_entries WHERE id=?', [id]); else { const s = await snapshot(); s.worldBookEntries = s.worldBookEntries.filter(x => x.id !== id); await webPersist(s) } },
+  async exportWorldBook() { return stringifyWorldBookExport((await snapshot()).worldBookEntries) },
+  async exportWorldBookFile() {
+    const content = await this.exportWorldBook()
+    if (!native) return { content, uri: undefined }
+    const result = await Filesystem.writeFile({ path: WORLD_BOOK_EXPORT_NAME, directory: Directory.Documents, data: content, encoding: Encoding.UTF8 })
+    return { content, uri: result.uri }
+  },
+  async importWorldBook(raw: unknown) {
+    const current = await snapshot()
+    const imported = parseWorldBookExport(raw, { existingIds: current.worldBookEntries.map(x => x.id) })
+    if (!imported.entries.length) return { imported: 0, remappedIds: imported.remappedIds }
+    if (!native) {
+      await webPersist({ ...current, worldBookEntries: [...current.worldBookEntries, ...imported.entries] })
+      return { imported: imported.entries.length, remappedIds: imported.remappedIds }
+    }
+    await db!.execute('BEGIN TRANSACTION')
+    try {
+      for (const entry of imported.entries) await upsert('world_book_entries', entry.id, entry, 'priority,created_at', [entry.priority, entry.createdAt])
+      await db!.execute('COMMIT')
+    } catch (error) {
+      await db!.execute('ROLLBACK')
+      throw error
+    }
+    return { imported: imported.entries.length, remappedIds: imported.remappedIds }
+  },
   async saveAsset(file: File, id: string) { const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); const base64 = btoa(binary); if (!native) return { avatar: `data:${file.type};base64,${base64}`, assetPath: '' }; try { await Filesystem.mkdir({ path: 'characters', directory: Directory.Data, recursive: true }) } catch { /* exists */ } const assetPath = `characters/${id}.png`; await Filesystem.writeFile({ path: assetPath, directory: Directory.Data, data: base64 }); const uri = await Filesystem.getUri({ path: assetPath, directory: Directory.Data }); return { avatar: Capacitor.convertFileSrc(uri.uri), assetPath } },
   async readAsset(assetPath: string) { const result = await Filesystem.readFile({ path: assetPath, directory: Directory.Data }); const raw = String(result.data); const bin = atob(raw.includes(',') ? raw.split(',')[1] : raw); return Uint8Array.from(bin, c => c.charCodeAt(0)) },
   async deleteCharacter(id: string) { const s = await snapshot(); const c = s.characters.find(x => x.id === id); if (native && c?.assetPath) try { await Filesystem.deleteFile({ path: c.assetPath, directory: Directory.Data }) } catch { /* removed */ } if (native) { const ids = (await db!.query('SELECT id FROM sessions WHERE character_id=?', [id])).values?.map(x => x.id) || []; for (const sid of ids) await db!.run('DELETE FROM messages WHERE session_id=?', [sid]); await db!.run('DELETE FROM sessions WHERE character_id=?', [id]); await db!.run('DELETE FROM characters WHERE id=?', [id]) } else { s.characters = s.characters.filter(x => x.id !== id); const ids = new Set(s.sessions.filter(x => x.characterId === id).map(x => x.id)); s.sessions = s.sessions.filter(x => x.characterId !== id); s.messages = s.messages.filter(x => !ids.has(x.sessionId)); await webPersist(s) } },
