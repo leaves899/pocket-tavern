@@ -37,7 +37,7 @@
 
 建议 PR：`feat: import and export world book data`。
 
-当前状态：P0 实现和自动化验证完成，分支为 `codex/world-book-import-export`；待推送并创建 PR，随后进入 P1。
+当前状态：P0 实现、自动化验证和合并均已完成；`main` 已包含 PR #1 和 PR #2，下一阶段进入 P1。
 
 ### P1：Android 存储与重启可靠性
 

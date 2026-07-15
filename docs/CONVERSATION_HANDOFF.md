@@ -6,13 +6,13 @@
 
 - 已完成世界书功能 PR #1 的合并。
 - 下一目标是按 `docs/NEXT_DEVELOPMENT_PLAN.md` 推进世界书导入/导出、Android 持久化验证和发布基线。
-- 当前阶段：`P0 世界书导入/导出已实现并通过自动化验证，待推送并创建 PR`。
+- 当前阶段：`P0 世界书导入/导出已合并到 main，下一步进入 P1`。
 
 ## 已确认事实
 
 - 仓库：`leaves899/pocket-tavern`
 - 工作目录：`C:\Users\Administrator\Documents\类酒馆开发`
-- 当前本地分支：`codex/world-book-import-export`
+- 当前本地分支：`main`
 - 功能分支远程提交：`0c5a810ba997ce9a16cf7a29da032ff19e633c70`
 - PR：[PR #1](https://github.com/leaves899/pocket-tavern/pull/1)
 - PR 状态：`MERGED`
@@ -51,7 +51,7 @@
 
 - 已确认的原有内容差异包括 `package-lock.json` 和 `android/gradle/wrapper/gradle-wrapper.jar`；它们属于本地生成/依赖基线变更，尚未纳入 PR #1。
 - `docs/CONVERSATION_HANDOFF.md`、`docs/NEXT_DEVELOPMENT_PLAN.md` 和 `docs/P0_WORLD_BOOK_ACCEPTANCE.md` 是交接、计划和验收文档。
-- `package-lock.json` 已由旧的错误占位内容规范为可用 lockfile；Gradle wrapper 已替换为可启动的 8.14.3 wrapper，这两项属于本阶段应纳入的开发基线并随当前 P0 commit 提交。
+- `package-lock.json` 已由旧的错误占位内容规范为可用 lockfile；Gradle wrapper 已替换为可启动的 8.14.3 wrapper，这两项已随 P0 合并提交进入 `main`。
 - 当前分支从既有本地基线创建，尚未切换到合并后的 `main`；不要丢弃其他本地生成物或强制重置工作区。
 
 ## 决策记录
@@ -66,9 +66,9 @@
 
 ## 下一步清单
 
-1. 推送 `codex/world-book-import-export` 并创建 `feat: import and export world book data` PR。
-2. 按验收文档执行人工 Web/Android 导入、重装和坏文件回滚验证。
-3. PR 合并后同步本交接文档，并按计划进入 P1：Android SQLite 迁移、重启和世界书注入验证。
+1. 按验收文档执行人工 Web/Android 导入、重装和坏文件回滚验证。
+2. 按计划进入 P1：Android SQLite 迁移、重启和世界书注入验证。
+3. P1 完成后同步本交接文档，并补充 GitHub Actions。
 4. 补充 GitHub Actions；再评估 P2 角色编辑与聊天导出。
 
 详细范围、验收标准和 PR 拆分见 [NEXT_DEVELOPMENT_PLAN.md](NEXT_DEVELOPMENT_PLAN.md)。
