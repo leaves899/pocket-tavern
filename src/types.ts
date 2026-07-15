@@ -28,6 +28,17 @@ export interface Character {
 
 export interface Persona { id: string; name: string; description: string; isDefault: boolean }
 export interface Preset { id: string; name: string; systemPrompt: string; temperature: number; maxTokens: number; contextTokens: number }
+export interface WorldBookEntry {
+  id: string
+  name: string
+  keywords: string[]
+  content: string
+  priority: number
+  enabled: boolean
+  characterIds: string[]
+  createdAt: number
+  updatedAt: number
+}
 export interface ChatSession { id: string; characterId: string; title: string; createdAt: number; updatedAt: number }
 export interface ChatMessage { id: string; sessionId: string; role: Role; content: string; createdAt: number; updatedAt: number }
 
