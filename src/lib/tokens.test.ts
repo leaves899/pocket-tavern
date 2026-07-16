@@ -13,13 +13,16 @@ describe('token estimation', () => {
 
   it('includes message framing overhead', () => {
     const content = 'short message'
+    expect(estimatePromptTokens([])).toBe(2)
     expect(estimatePromptTokens([{ role: 'user', content }])).toBe(estimateTextTokens(content) + 6)
   })
 
   it('reports safe, warning and blocked context states', () => {
     const messages = [{ role: 'system', content: 'x'.repeat(100) }]
     expect(getPromptUsage(messages, { ...defaultSettings, contextTokens: 8192, maxTokens: 128 }).risk).toBe('safe')
-    expect(getPromptUsage(messages, { ...defaultSettings, contextTokens: 170, maxTokens: 128 }).risk).toBe('warning')
+    const warning = getPromptUsage(messages, { ...defaultSettings, contextTokens: 170, maxTokens: 128 })
+    expect(warning.risk).toBe('warning')
+    expect(warning.ratio).toBeGreaterThanOrEqual(0.8)
     expect(getPromptUsage(messages, { ...defaultSettings, contextTokens: 64, maxTokens: 128 }).risk).toBe('blocked')
   })
 })

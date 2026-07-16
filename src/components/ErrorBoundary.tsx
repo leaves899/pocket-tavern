@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { toAppError } from '../lib/errors'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -16,7 +17,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Pocket Tavern render error', error, info.componentStack)
+    const normalized = toAppError(error, '应用渲染失败。', { code: 'unexpected', retryable: false })
+    console.error('Pocket Tavern render error', normalized.message, info.componentStack)
   }
 
   render() {

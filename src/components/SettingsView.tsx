@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Download, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { store } from '../lib/storage'
+import type { ErrorNormalizationOptions } from '../lib/errors'
 import type { AppSettings, Character, Persona, Preset, WorldBookEntry } from '../types'
 
 interface SettingsViewProps {
@@ -14,7 +15,7 @@ interface SettingsViewProps {
   worldBookEntries: WorldBookEntry[]
   reload: () => Promise<void>
   save: () => Promise<void>
-  reportError: (error: unknown, fallback?: string) => void
+  reportError: (error: unknown, fallback?: string, options?: ErrorNormalizationOptions) => void
   reportSuccess: (message: string) => void
 }
 
@@ -54,7 +55,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
     const content = worldBookContent.trim()
     const keywords = [...new Set(worldBookKeywords.split(/[\n,，]/).map(item => item.trim()).filter(Boolean))]
     if (!name || !content || !keywords.length) {
-      reportError(new Error('请填写条目名称、关键词和内容。'), '世界书条目不能为空。')
+      reportError(new Error('请填写条目名称、关键词和内容。'), '世界书条目不能为空。', { code: 'validation', retryable: false })
       return
     }
     try {
@@ -64,7 +65,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
       resetWorldBookForm()
       await reload()
     } catch (error) {
-      reportError(error, '世界书条目保存失败。')
+      reportError(error, '世界书条目保存失败。', { code: 'storage', retryable: true })
     }
   }
 
@@ -84,7 +85,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
       await reload()
       reportSuccess(`已导入 ${result.imported} 条世界书${result.remappedIds ? `，重映射 ${result.remappedIds} 个重复 ID` : ''}`)
     } catch (error) {
-      reportError(error, '世界书导入失败。')
+      reportError(error, '世界书导入失败。', { code: 'parse', retryable: false })
     } finally {
       if (worldBookFileRef.current) worldBookFileRef.current.value = ''
     }
@@ -99,7 +100,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
         reportSuccess('世界书 JSON 已下载')
       }
     } catch (error) {
-      reportError(error, '世界书导出失败。')
+      reportError(error, '世界书导出失败。', { code: 'storage', retryable: true })
     }
   }
 
@@ -111,7 +112,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
       setPersonaDescription('')
       await reload()
     } catch (error) {
-      reportError(error, '人设保存失败。')
+      reportError(error, '人设保存失败。', { code: 'storage', retryable: true })
     }
   }
 
@@ -122,7 +123,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
       setPresetName('')
       await reload()
     } catch (error) {
-      reportError(error, '预设保存失败。')
+      reportError(error, '预设保存失败。', { code: 'storage', retryable: true })
     }
   }
 
@@ -147,7 +148,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
     <h1>生成预设</h1>
     <div className="panel">
       <div className="inline-form"><input value={presetName} onChange={event => setPresetName(event.target.value)} placeholder="预设名称" /><button className="primary" onClick={() => void savePreset()}><Plus />保存当前</button></div>
-      {presets.map(preset => <div className="manage-row" key={preset.id}><span><strong>{preset.name}</strong><small>{preset.temperature.toFixed(1)} · {preset.maxTokens} / {preset.contextTokens}</small></span><button onClick={() => setSettings({ ...settings, systemPrompt: preset.systemPrompt, temperature: preset.temperature, maxTokens: preset.maxTokens, contextTokens: preset.contextTokens })}>应用</button><button className="danger" aria-label="删除预设" onClick={() => void (async () => { try { await store.deletePreset(preset.id); await reload() } catch (error) { reportError(error, '预设删除失败。') } })()}><Trash2 /></button></div>)}
+      {presets.map(preset => <div className="manage-row" key={preset.id}><span><strong>{preset.name}</strong><small>{preset.temperature.toFixed(1)} · {preset.maxTokens} / {preset.contextTokens}</small></span><button onClick={() => setSettings({ ...settings, systemPrompt: preset.systemPrompt, temperature: preset.temperature, maxTokens: preset.maxTokens, contextTokens: preset.contextTokens })}>应用</button><button className="danger" aria-label="删除预设" onClick={() => void (async () => { try { await store.deletePreset(preset.id); await reload() } catch (error) { reportError(error, '预设删除失败。', { code: 'storage', retryable: true }) } })()}><Trash2 /></button></div>)}
     </div>
 
     <h1>用户人设</h1>
@@ -155,9 +156,9 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
       <div className="persona-form"><input value={personaName} onChange={event => setPersonaName(event.target.value)} placeholder="名称" /><textarea rows={2} value={personaDescription} onChange={event => setPersonaDescription(event.target.value)} placeholder="角色看到的用户身份与背景" /><button className="primary" onClick={() => void savePersona()}><Plus />新增人设</button></div>
       {personas.map(persona => <div className="manage-row persona-row" key={persona.id}>
         <span><strong>{persona.name}{persona.isDefault && <em>默认</em>}</strong><small>{persona.description || '未填写描述'}</small></span>
-        {!persona.isDefault && <button onClick={() => void (async () => { try { await store.savePersona({ ...persona, isDefault: true }); await reload() } catch (error) { reportError(error, '默认人设设置失败。') } })()}>设为默认</button>}
-        <button aria-label="编辑人设" onClick={() => void (async () => { const name = prompt('人设名称', persona.name); if (!name) return; const description = prompt('人设描述', persona.description); if (description === null) return; try { await store.savePersona({ ...persona, name: name.trim(), description }); await reload() } catch (error) { reportError(error, '人设编辑失败。') } })()}><Pencil /></button>
-        <button className="danger" aria-label="删除人设" onClick={() => void (async () => { try { await store.deletePersona(persona.id); await reload() } catch (error) { reportError(error, '人设删除失败。') } })()}><Trash2 /></button>
+        {!persona.isDefault && <button onClick={() => void (async () => { try { await store.savePersona({ ...persona, isDefault: true }); await reload() } catch (error) { reportError(error, '默认人设设置失败。', { code: 'storage', retryable: true }) } })()}>设为默认</button>}
+        <button aria-label="编辑人设" onClick={() => void (async () => { const name = prompt('人设名称', persona.name); if (!name) return; const description = prompt('人设描述', persona.description); if (description === null) return; try { await store.savePersona({ ...persona, name: name.trim(), description }); await reload() } catch (error) { reportError(error, '人设编辑失败。', { code: 'storage', retryable: true }) } })()}><Pencil /></button>
+        <button className="danger" aria-label="删除人设" onClick={() => void (async () => { try { await store.deletePersona(persona.id); await reload() } catch (error) { reportError(error, '人设删除失败。', { code: 'storage', retryable: true }) } })()}><Trash2 /></button>
       </div>)}
     </div>
 
@@ -168,7 +169,7 @@ export function SettingsView({ settings, setSettings, apiKey, setApiKey, persona
         <div className="worldbook-characters"><small>适用角色（不选则全局生效）</small>{characters.map(character => <label key={character.id}><input type="checkbox" checked={worldBookCharacters.includes(character.id)} onChange={() => setWorldBookCharacters(ids => ids.includes(character.id) ? ids.filter(id => id !== character.id) : [...ids, character.id])} />{character.name}</label>)}</div>
         <div className="inline-form"><button className="primary" onClick={() => void saveWorldBook()}><Plus />{editingWorldBook ? '保存修改' : '新增条目'}</button>{editingWorldBook && <button onClick={resetWorldBookForm}>取消</button>}</div>
       </div>
-      {worldBookEntries.map(entry => <div className="manage-row worldbook-row" key={entry.id}><span><strong>{entry.name}{!entry.enabled && <em>已停用</em>}</strong><small>{entry.keywords.join(' · ')}{entry.characterIds.length ? ` · ${entry.characterIds.map(id => characters.find(character => character.id === id)?.name || '已删除角色').join('、')}` : ' · 全局'}</small></span><button onClick={() => void (async () => { try { await store.saveWorldBookEntry({ ...entry, enabled: !entry.enabled, updatedAt: Date.now() }); await reload() } catch (error) { reportError(error, '世界书状态更新失败。') } })()}>{entry.enabled ? '停用' : '启用'}</button><button aria-label="编辑世界书条目" onClick={() => editWorldBook(entry)}><Pencil /></button><button className="danger" aria-label="删除世界书条目" onClick={() => void (async () => { if (!confirm(`删除世界书条目“${entry.name}”？`)) return; try { await store.deleteWorldBookEntry(entry.id); if (editingWorldBook === entry.id) resetWorldBookForm(); await reload() } catch (error) { reportError(error, '世界书条目删除失败。') } })()}><Trash2 /></button></div>)}
+      {worldBookEntries.map(entry => <div className="manage-row worldbook-row" key={entry.id}><span><strong>{entry.name}{!entry.enabled && <em>已停用</em>}</strong><small>{entry.keywords.join(' · ')}{entry.characterIds.length ? ` · ${entry.characterIds.map(id => characters.find(character => character.id === id)?.name || '已删除角色').join('、')}` : ' · 全局'}</small></span><button onClick={() => void (async () => { try { await store.saveWorldBookEntry({ ...entry, enabled: !entry.enabled, updatedAt: Date.now() }); await reload() } catch (error) { reportError(error, '世界书状态更新失败。', { code: 'storage', retryable: true }) } })()}>{entry.enabled ? '停用' : '启用'}</button><button aria-label="编辑世界书条目" onClick={() => editWorldBook(entry)}><Pencil /></button><button className="danger" aria-label="删除世界书条目" onClick={() => void (async () => { if (!confirm(`删除世界书条目“${entry.name}”？`)) return; try { await store.deleteWorldBookEntry(entry.id); if (editingWorldBook === entry.id) resetWorldBookForm(); await reload() } catch (error) { reportError(error, '世界书条目删除失败。', { code: 'storage', retryable: true }) } })()}><Trash2 /></button></div>)}
     </div>
 
     <h1>外观</h1>

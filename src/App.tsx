@@ -8,7 +8,7 @@ import { Composer } from './components/chat/Composer'
 import { MessageList } from './components/chat/MessageList'
 import { useAppData } from './hooks/useAppData'
 import { useChat } from './hooks/useChat'
-import { toAppError, type AppError } from './lib/errors'
+import { toAppError, type AppError, type ErrorNormalizationOptions } from './lib/errors'
 import { parseCharacterFile, exportCard, exportCardPng } from './lib/cards'
 import { store } from './lib/storage'
 import type { Character } from './types'
@@ -39,8 +39,8 @@ export default function App() {
   const [success, setSuccess] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const reportError = useCallback((cause: unknown, fallback = '操作失败，请稍后重试。') => {
-    const next = toAppError(cause, fallback)
+  const reportError = useCallback((cause: unknown, fallback = '操作失败，请稍后重试。', options: ErrorNormalizationOptions = {}) => {
+    const next = toAppError(cause, fallback, options)
     if (next.code === 'cancelled') return
     setSuccess('')
     setError(next)
@@ -50,15 +50,15 @@ export default function App() {
     setSuccess(message)
     window.setTimeout(() => setSuccess(''), 1800)
   }, [])
-  const runAction = useCallback(async (action: () => Promise<void>, fallback?: string) => {
+  const runAction = useCallback(async (action: () => Promise<void>, fallback?: string, options: ErrorNormalizationOptions = {}) => {
     try {
       await action()
     } catch (cause) {
-      reportError(cause, fallback)
+      reportError(cause, fallback, options)
     }
   }, [reportError])
 
-  const data = useAppData(cause => reportError(cause, '应用数据初始化失败，请重新加载。'))
+  const data = useAppData(cause => reportError(cause, '应用数据初始化失败，请重新加载。', { code: 'initialization', retryable: true }))
   const chat = useChat({ ...data, reportError })
   const { active: activeChat, setActive: setActiveChat } = chat
 
@@ -88,10 +88,14 @@ export default function App() {
   }, [activeChat, setActiveChat, tab])
 
   const saveSettings = useCallback(async () => {
-    await store.saveSettings(data.settings)
-    await store.setApiKey(data.apiKey.trim())
-    reportSuccess('设置已保存')
-  }, [data.apiKey, data.settings, reportSuccess])
+    try {
+      await store.saveSettings(data.settings)
+      await store.setApiKey(data.apiKey.trim())
+      reportSuccess('设置已保存')
+    } catch (error) {
+      reportError(error, '设置保存失败，请稍后重试。', { code: 'storage', retryable: true })
+    }
+  }, [data.apiKey, data.settings, reportError, reportSuccess])
 
   const importFile = async (file?: File) => {
     if (!file) return
@@ -102,7 +106,7 @@ export default function App() {
       await data.reload()
       reportSuccess(`已导入角色 ${character.name}`)
     } catch (cause) {
-      reportError(cause, '角色卡导入失败。')
+      reportError(cause, '角色卡导入失败。', { code: 'parse', retryable: false })
     } finally {
       if (fileRef.current) fileRef.current.value = ''
     }
@@ -112,9 +116,17 @@ export default function App() {
     if (!confirm(`删除 ${character.name} 及其聊天记录？`)) return
     await store.deleteCharacter(character.id)
     await data.reload()
-  }, '角色删除失败。')
+  }, '角色删除失败。', { code: 'storage', retryable: true })
 
-  if (!data.ready) return <main className="loading">Pocket Tavern</main>
+  if (!data.ready) return <main className="loading">
+    {error
+      ? <div className="initialization-error" role="alert">
+        <h1>应用初始化失败</h1>
+        <p>{error.message}</p>
+        <button className="primary" onClick={() => window.location.reload()}>重新加载</button>
+      </div>
+      : 'Pocket Tavern'}
+  </main>
 
   return <div className="app">
     <header className="topbar">
@@ -129,10 +141,10 @@ export default function App() {
       {tab === 'library' && <section className="library">
         <div className="section-title"><div><h1>你的角色</h1><p>{data.characters.length ? `${data.characters.length} 位角色，点击继续对话` : '导入一张角色卡开始'}</p></div><button className="primary" onClick={() => fileRef.current?.click()}><Plus />导入</button></div>
         <input ref={fileRef} hidden type="file" accept=".json,.png,application/json,image/png" onChange={event => void importFile(event.target.files?.[0])} />
-        <div className="character-grid">{data.characters.map(character => <article className="character-card" key={character.id} onClick={() => void runAction(async () => { await chat.openChat(character); setTab('chat') }, '聊天打开失败。')}>
+        <div className="character-grid">{data.characters.map(character => <article className="character-card" key={character.id} onClick={() => void runAction(async () => { await chat.openChat(character); setTab('chat') }, '聊天打开失败。', { code: 'storage', retryable: true })}>
           <div className="avatar">{character.avatar ? <img src={character.avatar} alt="" /> : character.name.slice(0, 1).toUpperCase()}</div>
           <div className="char-info"><h2>{character.name}</h2><p>{character.data.description || character.data.personality || '等待与你相遇'}</p><div className="tags">{(character.data.tags || []).slice(0, 2).map(tag => <span key={tag}>{tag}</span>)}</div></div>
-          <div className="card-actions"><button className="icon small" title="导出 JSON" aria-label="导出 JSON" onClick={event => { event.stopPropagation(); download(`${character.name}.json`, exportCard(character)) }}><Download /></button>{character.assetPath && <button className="icon small" title="导出 PNG" aria-label="导出 PNG" onClick={event => { event.stopPropagation(); void runAction(async () => downloadBytes(`${character.name}.png`, exportCardPng(character, await store.readAsset(character.assetPath!))), '角色 PNG 导出失败。') }}><FileImage /></button>}<button className="icon small danger" title="删除" aria-label="删除" onClick={event => { event.stopPropagation(); deleteCharacter(character) }}><Trash2 /></button></div>
+          <div className="card-actions"><button className="icon small" title="导出 JSON" aria-label="导出 JSON" onClick={event => { event.stopPropagation(); void runAction(async () => download(`${character.name}.json`, exportCard(character)), '角色 JSON 导出失败。', { code: 'parse', retryable: false }) }}><Download /></button>{character.assetPath && <button className="icon small" title="导出 PNG" aria-label="导出 PNG" onClick={event => { event.stopPropagation(); void runAction(async () => downloadBytes(`${character.name}.png`, exportCardPng(character, await store.readAsset(character.assetPath!))), '角色 PNG 导出失败。', { code: 'storage', retryable: true }) }}><FileImage /></button>}<button className="icon small danger" title="删除" aria-label="删除" onClick={event => { event.stopPropagation(); deleteCharacter(character) }}><Trash2 /></button></div>
         </article>)}</div>
         {!data.characters.length && <div className="empty"><Library /><h2>酒馆还很安静</h2><p>支持 Character Card V2 PNG 和 JSON，未知字段会原样保留。</p><button className="primary" onClick={() => fileRef.current?.click()}><Upload />选择角色卡</button></div>}
       </section>}

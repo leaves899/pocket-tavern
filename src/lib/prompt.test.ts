@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { composePrompt } from './prompt'
+import { getPromptUsage } from './tokens'
 import { defaultSettings } from '../types'
 const character: any = { name: 'Luna', data: { name: 'Luna', description: 'Talks to {{user}}', personality: 'calm', scenario: '', first_mes: '', mes_example: '' } }
 describe('composePrompt', () => {
@@ -28,5 +29,13 @@ describe('composePrompt', () => {
     expect(world).toContain('content 4')
     expect(world).not.toContain('content 5')
     expect(world).toContain('content 0')
+  })
+  it('accounts for cumulative world-book cost while preserving a usable prompt budget', () => {
+    const settings = { ...defaultSettings, contextTokens: 4096, maxTokens: 300 }
+    const history = [{ id: '1', sessionId: 's', role: 'user' as const, content: 'key latest turn', createdAt: 1, updatedAt: 1 }]
+    const entries: any[] = Array.from({ length: 5 }, (_, i) => ({ id: String(i), name: `Entry ${i}`, keywords: ['key'], content: 'lore '.repeat(120), priority: i, enabled: true, characterIds: [], createdAt: i }))
+    const prompt = composePrompt(character, undefined, history, settings, entries)
+    expect(prompt.some(message => message.content.includes('key latest turn'))).toBe(true)
+    expect(getPromptUsage(prompt, settings).risk).not.toBe('blocked')
   })
 })

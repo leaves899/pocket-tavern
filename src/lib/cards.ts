@@ -6,6 +6,11 @@ export const MAX_CHARACTER_NAME_LENGTH = 200
 const MAX_NESTING_DEPTH = 32
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])
 const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype'])
+const CHARACTER_STRING_FIELDS = [
+  'name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example',
+  'system_prompt', 'post_history_instructions', 'creator_notes', 'creator', 'character_version',
+] as const
+const CHARACTER_STRING_ARRAY_FIELDS = ['alternate_greetings', 'group_only_greetings', 'tags'] as const
 
 const readU32 = (bytes: Uint8Array, offset: number) => {
   if (offset < 0 || offset + 4 > bytes.length) throw new Error('PNG chunk 长度字段不完整。')
@@ -61,13 +66,30 @@ const readOptionalStringList = (record: Record<string, unknown>, field: string):
   return value.map(item => item.trim()).filter(Boolean)
 }
 
+function validateKnownFields(record: Record<string, unknown>): void {
+  for (const field of CHARACTER_STRING_FIELDS) {
+    const value = record[field]
+    if (value !== undefined && typeof value !== 'string') throw new Error(`角色卡字段 "${field}" 必须是字符串。`)
+  }
+  for (const field of CHARACTER_STRING_ARRAY_FIELDS) {
+    const value = record[field]
+    if (value !== undefined && (!Array.isArray(value) || value.some(item => typeof item !== 'string'))) {
+      throw new Error(`角色卡字段 "${field}" 必须是字符串数组。`)
+    }
+  }
+}
+
 export function parseCardJson(raw: unknown): Character {
   if (!isRecord(raw)) throw new Error('角色卡 JSON 无效。')
   validateJsonValue(raw)
   ensureMetadataSize(raw)
   const card = structuredClone(raw) as Record<string, unknown>
+  if (card.spec !== undefined && card.spec !== 'chara_card_v2') throw new Error('角色卡 spec 字段不受支持。')
+  if (card.spec_version !== undefined && card.spec !== 'chara_card_v2') throw new Error('V1 角色卡不应包含 spec_version 字段。')
+  if (card.spec === 'chara_card_v2' && card.spec_version !== undefined && typeof card.spec_version !== 'string') throw new Error('角色卡 spec_version 必须是字符串。')
   const sourceValue = card.spec === 'chara_card_v2' ? card.data : card
   if (!isRecord(sourceValue)) throw new Error('角色卡 V2 的 data 字段无效。')
+  validateKnownFields(sourceValue)
   const name = readRequiredString(sourceValue, 'name').trim()
   if (!name) throw new Error('角色卡缺少名称。')
   if (name.length > MAX_CHARACTER_NAME_LENGTH) throw new Error(`角色卡名称不能超过 ${MAX_CHARACTER_NAME_LENGTH} 个字符。`)
@@ -84,7 +106,7 @@ export function parseCardJson(raw: unknown): Character {
   for (const field of ['system_prompt', 'post_history_instructions', 'creator_notes']) {
     if (sourceValue[field] !== undefined) data[field] = readRequiredString(sourceValue, field)
   }
-  for (const field of ['alternate_greetings', 'tags']) {
+  for (const field of CHARACTER_STRING_ARRAY_FIELDS) {
     const values = readOptionalStringList(sourceValue, field)
     if (values) data[field] = values
   }
@@ -128,7 +150,10 @@ function readPngChunks(bytes: Uint8Array, onChunk?: (type: string, data: Uint8Ar
     if (crc32(crcInput) !== expectedCrc) throw new Error(`PNG chunk ${type} 校验失败。`)
     onChunk?.(type, data)
     offset += length + 12
-    if (type === 'IEND') return offset - length - 12
+    if (type === 'IEND') {
+      if (length !== 0) throw new Error('PNG IEND chunk 必须为空。')
+      return offset - 12
+    }
   }
   throw new Error('PNG 文件缺少 IEND chunk。')
 }
@@ -156,11 +181,17 @@ async function inflateLimited(data: Uint8Array): Promise<Uint8Array> {
 function decodeBase64(value: string): string {
   const normalized = value.trim()
   if (!normalized || normalized.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) throw new Error('PNG 中的角色卡 Base64 数据无效。')
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0
+  const estimatedBytes = Math.floor(normalized.length * 3 / 4) - padding
+  if (estimatedBytes > MAX_CARD_METADATA_BYTES) throw new Error('PNG 中的角色卡元数据超过 2 MiB 限制。')
   try {
     const binary = atob(normalized)
     const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
-    return utf8(bytes)
+    const decoded = utf8(bytes)
+    if (new TextEncoder().encode(decoded).byteLength > MAX_CARD_METADATA_BYTES) throw new Error('PNG 中的角色卡元数据超过 2 MiB 限制。')
+    return decoded
   } catch (error) {
+    if (error instanceof Error && error.message.includes('超过 2 MiB')) throw error
     throw new Error(`PNG 中的角色卡数据无法解码：${error instanceof Error ? error.message : '未知错误'}`)
   }
 }
@@ -189,7 +220,12 @@ async function readCharacterMetadata(bytes: Uint8Array): Promise<string> {
     const { type, data } = chunk
     if (type === 'zTXt') {
       const separator = data.indexOf(0)
-      if (separator >= 1 && latin1(data.slice(0, separator)) === 'chara') encoded = latin1(await inflateLimited(data.slice(separator + 2)))
+      if (separator >= 1 && latin1(data.slice(0, separator)) === 'chara') {
+        try { encoded = latin1(await inflateLimited(data.slice(separator + 2))) } catch (error) {
+          if (error instanceof Error && error.message.includes('超过 2 MiB')) throw error
+          throw new Error('PNG zTXt 角色卡元数据解压失败。')
+        }
+      }
     }
     if (type === 'iTXt') {
       const keywordEnd = data.indexOf(0)
@@ -197,7 +233,8 @@ async function readCharacterMetadata(bytes: Uint8Array): Promise<string> {
       const keyword = latin1(data.slice(0, keywordEnd))
       if (keyword !== 'chara') continue
       const compressionFlag = data[keywordEnd + 1]
-      if (compressionFlag !== 0 && compressionFlag !== 1) throw new Error('PNG iTXt 压缩标记无效。')
+      const compressionMethod = data[keywordEnd + 2]
+      if ((compressionFlag !== 0 && compressionFlag !== 1) || compressionMethod !== 0) throw new Error('PNG iTXt 压缩标记无效。')
       let cursor = keywordEnd + 3
       const languageEnd = data.indexOf(0, cursor)
       if (languageEnd < 0) throw new Error('PNG iTXt 语言字段不完整。')
@@ -205,7 +242,14 @@ async function readCharacterMetadata(bytes: Uint8Array): Promise<string> {
       const translatedEnd = data.indexOf(0, cursor)
       if (translatedEnd < 0) throw new Error('PNG iTXt 翻译字段不完整。')
       cursor = translatedEnd + 1
-      encoded = compressionFlag === 1 ? latin1(await inflateLimited(data.slice(cursor))) : utf8(data.slice(cursor))
+      if (compressionFlag === 1) {
+        try { encoded = latin1(await inflateLimited(data.slice(cursor))) } catch (error) {
+          if (error instanceof Error && error.message.includes('超过 2 MiB')) throw error
+          throw new Error('PNG iTXt 角色卡元数据解压失败。')
+        }
+      } else {
+        try { encoded = utf8(data.slice(cursor)) } catch { throw new Error('PNG iTXt 角色卡元数据不是有效 UTF-8。') }
+      }
     }
   }
   if (!encoded) throw new Error('PNG 中未找到 chara 元数据。')
@@ -215,13 +259,16 @@ async function readCharacterMetadata(bytes: Uint8Array): Promise<string> {
 export async function parseCharacterFile(file: File): Promise<Character> {
   if (file.size > MAX_CARD_FILE_BYTES) throw new Error('角色卡文件不能超过 10 MiB。')
   if (file.name.toLowerCase().endsWith('.json')) {
-    try { return parseCardJson(JSON.parse(await file.text())) } catch (error) {
-      if (error instanceof Error && !error.message.includes('JSON')) throw error
-      throw new Error('角色卡 JSON 无效。')
-    }
+    let raw: unknown
+    try { raw = JSON.parse(await file.text()) } catch { throw new Error('角色卡 JSON 无效。') }
+    return parseCardJson(raw)
   }
   const bytes = new Uint8Array(await file.arrayBuffer())
-  return parseCardJson(JSON.parse(await readCharacterMetadata(bytes)))
+  const metadata = await readCharacterMetadata(bytes)
+  try { return parseCardJson(JSON.parse(metadata)) } catch (error) {
+    if (error instanceof SyntaxError) throw new Error('PNG 中的角色卡 JSON 无效。')
+    throw error
+  }
 }
 
 export function exportCard(character: Character): string {
@@ -254,6 +301,7 @@ export function exportCardPng(character: Character, source: Uint8Array): Uint8Ar
   chunk.set(payload, 8)
   chunk.set(u32(crc32(crcInput)), 8 + payload.length)
   const output = new Uint8Array(source.length + chunk.length)
+  if (output.length > MAX_CARD_FILE_BYTES) throw new Error('导出的角色卡文件不能超过 10 MiB。')
   output.set(source.slice(0, iendOffset))
   output.set(chunk, iendOffset)
   output.set(source.slice(iendOffset), iendOffset + chunk.length)

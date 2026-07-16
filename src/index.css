@@ -1037,6 +1037,30 @@ select:focus-visible {
   font-weight: 700;
 }
 
+.initialization-error {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 32rem;
+  padding: 24px;
+  color: var(--text);
+  text-align: center;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.initialization-error h1 {
+  margin: 0;
+  font-family: var(--heading-font);
+  font-size: 24px;
+}
+
+.initialization-error p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .error-fallback {
   display: grid;
   place-items: center;

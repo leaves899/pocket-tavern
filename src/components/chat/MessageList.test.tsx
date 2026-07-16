@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { MessageList } from './MessageList'
 
@@ -16,8 +16,17 @@ const messages = Array.from({ length: 1000 }, (_, index) => ({ id: String(index)
 
 describe('MessageList', () => {
   it('renders a virtualized long conversation without changing message actions', async () => {
-    render(<MessageList messages={messages} busy={false} onSetEditing={vi.fn()} onSaveEdited={vi.fn()} onDelete={vi.fn()} onRollback={vi.fn()} onRegenerate={vi.fn()} />)
+    const onSetEditing = vi.fn()
+    const onDelete = vi.fn()
+    const onRollback = vi.fn()
+    render(<MessageList messages={messages} busy={false} onSetEditing={onSetEditing} onSaveEdited={vi.fn()} onDelete={onDelete} onRollback={onRollback} onRegenerate={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Message 0')).toBeDefined())
     expect(screen.queryByText('Message 999')).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '回档到此处前' })[0])
+    expect(onSetEditing).toHaveBeenCalledWith('0')
+    expect(onDelete).toHaveBeenCalledWith('0')
+    expect(onRollback).toHaveBeenCalledWith(messages[0])
   })
 })

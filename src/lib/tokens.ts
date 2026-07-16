@@ -19,8 +19,8 @@ export interface TokenUsage {
   encoding: 'cl100k_base'
 }
 
-const MESSAGE_OVERHEAD = 4
-const PROMPT_OVERHEAD = 2
+export const MESSAGE_TOKEN_OVERHEAD = 4
+export const PROMPT_TOKEN_OVERHEAD = 2
 const TOKEN_CACHE_LIMIT = 2048
 const tokenCache = new Map<string, number>()
 
@@ -34,11 +34,11 @@ export function estimateTextTokens(text: string): number {
 }
 
 export function estimateMessageTokens(message: TokenMessage): number {
-  return estimateTextTokens(message.content) + MESSAGE_OVERHEAD
+  return estimateTextTokens(message.content) + MESSAGE_TOKEN_OVERHEAD
 }
 
 export function estimatePromptTokens(messages: readonly TokenMessage[]): number {
-  return (messages.length ? PROMPT_OVERHEAD : 0) + messages.reduce((total, message) => total + estimateMessageTokens(message), 0)
+  return PROMPT_TOKEN_OVERHEAD + messages.reduce((total, message) => total + estimateMessageTokens(message), 0)
 }
 
 export function getPromptUsage(messages: readonly TokenMessage[], settings: Pick<AppSettings, 'contextTokens' | 'maxTokens'>): TokenUsage {
@@ -53,5 +53,5 @@ export function getPromptUsage(messages: readonly TokenMessage[], settings: Pick
 }
 
 export function getInputBudget(settings: Pick<AppSettings, 'contextTokens' | 'maxTokens'>): number {
-  return Math.max(0, Math.floor(settings.contextTokens) - Math.max(0, Math.floor(settings.maxTokens)) - PROMPT_OVERHEAD)
+  return Math.max(0, Math.floor(settings.contextTokens) - Math.max(0, Math.floor(settings.maxTokens)) - PROMPT_TOKEN_OVERHEAD)
 }

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { composePrompt } from '../lib/prompt'
 import { streamCompletion } from '../lib/deepseek'
-import { isAbortError, PocketTavernError, toAppError } from '../lib/errors'
+import { isAbortError, PocketTavernError, toAppError, type ErrorNormalizationOptions } from '../lib/errors'
 import { getPromptUsage, type TokenUsage } from '../lib/tokens'
 import { store } from '../lib/storage'
 import type { AppSettings, Character, ChatMessage, ChatSession, Persona, WorldBookEntry } from '../types'
@@ -18,7 +18,7 @@ interface UseChatOptions {
   worldBookEntries: WorldBookEntry[]
   reload: () => Promise<void>
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>
-  reportError: (error: unknown, fallback?: string) => void
+  reportError: (error: unknown, fallback?: string, options?: ErrorNormalizationOptions) => void
 }
 
 export function useChat({ characters, personas, sessions, messages, settings, apiKey, worldBookEntries, reload, setMessages, reportError }: UseChatOptions) {
@@ -148,7 +148,7 @@ export function useChat({ characters, personas, sessions, messages, settings, ap
       setEditing(undefined)
       await reload()
     } catch (error) {
-      reportError(error, '消息保存失败。')
+      reportError(error, '消息保存失败。', { code: 'storage', retryable: true })
     }
   }, [reload, reportError])
 
@@ -157,7 +157,7 @@ export function useChat({ characters, personas, sessions, messages, settings, ap
       await store.deleteMessage(id)
       await reload()
     } catch (error) {
-      reportError(error, '消息删除失败。')
+      reportError(error, '消息删除失败。', { code: 'storage', retryable: true })
     }
   }, [reload, reportError])
 
@@ -168,7 +168,7 @@ export function useChat({ characters, personas, sessions, messages, settings, ap
       await store.rollbackSession(message.sessionId, chatMessages.slice(start).map(item => item.id))
       await reload()
     } catch (error) {
-      reportError(error, '回档失败。')
+      reportError(error, '回档失败。', { code: 'storage', retryable: true })
     }
   }, [chatMessages, reload, reportError])
 

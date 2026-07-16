@@ -16,14 +16,33 @@ export function getGradleInvocation(platform = process.platform, executable = tr
   return executable ? { command: './gradlew', args: [] } : { command: 'sh', args: ['./gradlew'] }
 }
 
+function quoteWindowsArg(value) {
+  const text = String(value)
+  if (text && !/[\s"&|<>^]/.test(text)) return text
+  const escaped = text.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, '$1$1')
+  return `"${escaped}"`
+}
+
 export function runCommand(command, args, cwd, platform = process.platform) {
   return new Promise((resolve, reject) => {
     const windows = platform === 'win32'
-    const executable = windows ? (process.env.ComSpec || 'cmd.exe') : command
-    const executableArgs = windows ? ['/d', '/s', '/c', [command, ...args].map(value => `"${String(value).replaceAll('"', '\\"')}"`).join(' ')] : args
+    const executable = windows ? (process.env.ComSpec || process.env.COMSPEC || 'cmd.exe') : command
+    const executableArgs = windows ? ['/d', '/s', '/c', [command, ...args].map(quoteWindowsArg).join(' ')] : args
     const child = spawn(executable, executableArgs, { cwd, stdio: 'inherit', shell: false })
-    child.on('error', reject)
-    child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${command} 退出码为 ${code ?? 1}`)))
+    let settled = false
+    const fail = (error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+    child.once('error', fail)
+    child.once('exit', code => {
+      if (settled) return
+      if (code === 0) {
+        settled = true
+        resolve()
+      } else fail(new Error(`${command} exited with code ${code ?? 1}`))
+    })
   })
 }
 

@@ -13,6 +13,13 @@ describe('error normalization', () => {
     expect(result.message).toContain('[redacted]')
   })
 
+  it('redacts credential and request-body fields', () => {
+    const result = toAppError(new Error('apiKey=secret-key request body={"messages":["private"]}'))
+    expect(result.message).not.toContain('secret-key')
+    expect(result.message).not.toContain('private')
+    expect(result.message).toContain('[redacted]')
+  })
+
   it('normalizes unknown thrown values', () => {
     expect(toAppError({ unexpected: true }, 'fallback')).toMatchObject({ code: 'unexpected', message: 'fallback' })
   })

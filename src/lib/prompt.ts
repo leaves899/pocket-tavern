@@ -26,29 +26,44 @@ export function composePrompt(character: Character, persona: Persona | undefined
   ].filter(Boolean).map(x => replace(String(x), character, persona))
   const tail = d.post_history_instructions ? replace(d.post_history_instructions, character, persona) : ''
   const system: PromptMessage = { role: 'system', content: blocks.join('\n\n') }
-  const inputBudget = getInputBudget(settings)
   const tailMessage = tail ? { role: 'system' as const, content: tail } : undefined
+  const inputBudget = getInputBudget(settings)
   let usedTokens = estimateMessageTokens(system) + (tailMessage ? estimateMessageTokens(tailMessage) : 0)
-  const selectedEntries: string[] = []
-  for (const candidate of worldBookMessage(character, persona, history, entries)) {
-    if (selectedEntries.length >= 5) break
-    const content = `Relevant world information:\n\n${[...selectedEntries, candidate.content].join('\n\n')}`
-    const cost = estimateMessageTokens({ role: 'system', content })
-    if (usedTokens + cost <= inputBudget) selectedEntries.push(candidate.content)
-  }
-  if (selectedEntries.length) usedTokens += estimateMessageTokens({ role: 'system', content: `Relevant world information:\n\n${selectedEntries.join('\n\n')}` })
-  const selected: PromptMessage[] = []
+
+  // Select history from newest to oldest first. This keeps the current turn
+  // available even when optional world-book context has to be omitted.
+  const selectedHistory: PromptMessage[] = []
   for (let i = history.length - 1; i >= 0; i--) {
     const content = replace(history[i].content, character, persona)
     const message = { role: history[i].role, content }
     const cost = estimateMessageTokens(message)
     if (usedTokens + cost > inputBudget) {
-      if (!selected.length) selected.unshift(message)
+      // Keep an oversized newest message so getPromptUsage can block the
+      // request instead of silently sending a prompt without the user's turn.
+      if (!selectedHistory.length) {
+        selectedHistory.unshift(message)
+        usedTokens += cost
+      }
       break
     }
-    selected.unshift(message)
+    selectedHistory.unshift(message)
     usedTokens += cost
   }
+
+  const selectedEntries: string[] = []
+  for (const candidate of worldBookMessage(character, persona, history, entries)) {
+    if (selectedEntries.length >= 5) break
+    const previousContent = selectedEntries.length ? `Relevant world information:\n\n${selectedEntries.join('\n\n')}` : ''
+    const nextContent = `Relevant world information:\n\n${[...selectedEntries, candidate.content].join('\n\n')}`
+    const previousCost = previousContent ? estimateMessageTokens({ role: 'system', content: previousContent }) : 0
+    const nextCost = estimateMessageTokens({ role: 'system', content: nextContent })
+    if (usedTokens + nextCost - previousCost <= inputBudget) {
+      selectedEntries.push(candidate.content)
+      usedTokens += nextCost - previousCost
+    }
+  }
+
+  const selected: PromptMessage[] = [...selectedHistory]
   if (selectedEntries.length) selected.push({ role: 'system', content: `Relevant world information:\n\n${selectedEntries.join('\n\n')}` })
   if (tailMessage) selected.push(tailMessage)
   return [system, ...selected]
