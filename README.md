@@ -1,85 +1,73 @@
 # Pocket Tavern
 
-Pocket Tavern 是一个无需 SillyTavern 服务端的 Android 移动酒馆 MVP。它使用 React、TypeScript、Vite、Capacitor 和 SQLite，直接调用 DeepSeek Chat Completions。
+Pocket Tavern 是一个无需 SillyTavern 服务端的 Android 移动酒馆 MVP，使用 React、TypeScript、Vite、Capacitor 和 SQLite，直接调用兼容 OpenAI Chat Completions 的模型服务。
 
 ## 功能
 
-- Character Card V2 PNG/JSON 导入，JSON/PNG 导出，未知字段往返保留
-- DeepSeek `deepseek-chat` / `deepseek-reasoner`，支持自定义兼容模型 ID、HTTPS Base URL、SSE 流式回复和停止
-- 消息编辑、删除、重试/重新生成，网络与 API 错误提示
-- 世界书条目增删改、启停、优先级、角色范围和关键词注入；支持版本化 JSON 导入/导出
-- SQLite 保存角色、用户人设、设置、会话和消息；PNG 原件在应用私有目录
-- API Key 仅保存在 Capacitor Preferences，不写日志、不进入角色卡或数据导出
-- 固定提示词编排、宏替换和按上下文预算裁剪
-- 深色/浅色/跟随系统、Android 安全区、软键盘 resize 和返回键导航
+- Character Card V2 PNG/JSON 导入，JSON/PNG 导出，并保留未知字段。
+- DeepSeek Chat Completions、HTTPS Base URL、SSE 流式回复、停止和重试。
+- 消息编辑、删除、回档和重新生成。
+- 世界书条目管理、关键词匹配、优先级、角色范围和 versioned JSON 导入/导出。
+- SQLite/Preferences 持久化；API Key 只保存在本机 Preferences，不进入导出文件。
+- 本地 BPE Token 估算、上下文风险提示、长对话变量高度虚拟列表。
+- 深色/浅色/跟随系统主题，以及 Android 安全区和软键盘适配。
 
-当前版本暂不包含扩展生态、群聊、聊天 JSONL、TTS、图片生成、云同步或 iOS。
+## 开发环境
 
-## 开发
+- Node.js 20+
+- JDK 21
+- Android SDK 35/36（仅构建 Android 时需要）
 
-要求 Node.js 20+、JDK 21、Android SDK 35/36。在 PowerShell 中：
-
-```powershell
-npm install
+```bash
+npm ci
 npm test
+npm run lint
+npm run build
 npm run dev
 ```
 
-浏览器开发模式使用 localStorage 作为同接口回退；Android 包使用 SQLite 和 Preferences。
-
 ## 构建 Android debug APK
 
-```powershell
-$env:JAVA_HOME = (Get-ChildItem 'C:\Program Files\Eclipse Adoptium' -Directory | Where-Object Name -like 'jdk-21*' | Select-Object -First 1).FullName
-$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
-$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+构建入口会自动执行 Web 构建、Capacitor 同步和 Gradle debug 构建，支持 Windows、macOS 和 Linux：
+
+```bash
 npm run android:build
 ```
 
-产物位于 `android/app/build/outputs/apk/debug/app-debug.apk`。安装：
+APK 输出在：
 
-```powershell
-& "$env:ANDROID_HOME\platform-tools\adb.exe" install -r android\app\build\outputs\apk\debug\app-debug.apk
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 验收路径
+POSIX 环境需要确保 `JAVA_HOME` 和 Android SDK 已配置；如果 `android/gradlew` 没有执行权限，构建脚本会自动通过 `sh` 调用它。
 
-1. 安装并启动 APK。
-2. 在角色库导入 `samples/luna.card.json` 或兼容 V2 PNG。
-3. 设置中填写 DeepSeek API Key，选择模型并保存。
-4. 打开角色，发送消息，确认文本逐步出现；发送中可点方形按钮停止。
-5. 编辑/删除消息并重新生成最后回复。
-6. 强制关闭并重启应用，确认角色、会话、消息和设置恢复。
-7. 从角色卡操作区导出 JSON；PNG 来源的角色还可导出包含更新元数据的 PNG。
-8. 在设置 → 世界书中导出 `pocket-tavern-world-book.json`，确认文件包含版本号、条目内容和角色范围，但不包含 API Key。
-9. 清空浏览器站点数据或重装 APK 后，从设置 → 世界书导入该 JSON；确认条目、停用状态、优先级、关键词和角色范围恢复。
-10. 使用一个损坏 JSON 或非法优先级文件导入，确认已有世界书不发生部分写入；导入同 ID 条目时确认界面提示重映射。
+## Token 估算
 
-## 安全说明
+聊天界面使用 `gpt-tokenizer` 的 `cl100k_base` BPE 编码估算输入 Token，并为输出预留 `maxTokens`。该数值比字符启发式更接近真实请求，但 DeepSeek 服务端可能使用不同 tokenizer，因此界面会明确标注为本地估算。
 
-不要把真实 Key 写入源码、测试样例或问题日志。应用不会显示、记录或导出 Authorization 请求头。世界书导出只包含世界书数据，不包含 API Key。卸载应用会清除 SQLite、Preferences 和私有角色资源；已导出的世界书位于 Android Documents 目录，不随应用数据清除。
+超过上下文容量时，应用会阻止请求并提示缩短消息或降低最大输出；接近容量时会显示风险提示。
 
-## 世界书导出格式
+## 安全与数据
 
-导出文件使用版本化 JSON，当前格式标识为 `pocket-tavern.world-book`、版本 `1`。导入采用追加合并，不会覆盖已有条目；已有 ID 或文件内重复 ID 会自动生成新 ID。未知字段会被忽略，缺少的可选字段使用安全默认值；校验失败时不会写入任何条目。
+- 只接受 HTTPS 模型 Base URL。
+- API Key 不写入日志、角色卡、业务快照或世界书导出文件。
+- 角色卡文件有大小、PNG chunk、元数据、JSON 类型和危险字段校验。
+- 不要把真实 API Key 提交到源码、测试、Issue 或日志中。
 
-```json
-{
-  "format": "pocket-tavern.world-book",
-  "version": 1,
-  "exportedAt": 0,
-  "entries": [
-    {
-      "id": "moon-port",
-      "name": "月港",
-      "keywords": ["月港", "moon"],
-      "content": "潮汐由月亮牵引。",
-      "priority": 3,
-      "enabled": true,
-      "characterIds": [],
-      "createdAt": 0,
-      "updatedAt": 0
-    }
-  ]
-}
+## 验收
+
+```bash
+npm ci
+npm test
+npm run lint
+npm run build
+npm run android:build
+git diff --check
 ```
+
+详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 当前范围
+
+当前版本聚焦本地角色卡、聊天、世界书、Android 持久化和可靠性。云同步、iOS、群聊、TTS、图片生成和聊天导出暂不在本版本范围内。

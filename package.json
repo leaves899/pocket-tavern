@@ -1,7 +1,7 @@
 {
   "name": "pocket-tavern",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "android:sync": "npm run build && cap sync android",
-    "android:build": "npm run android:sync && cd android && gradlew.bat assembleDebug",
+    "android:build": "node scripts/android-build.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -23,6 +23,8 @@
     "@capacitor/keyboard": "^8.0.5",
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
+    "@tanstack/react-virtual": "^3.14.6",
+    "gpt-tokenizer": "^3.4.0",
     "jeep-sqlite": "^2.8.0",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",

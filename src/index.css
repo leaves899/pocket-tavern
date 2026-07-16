@@ -620,6 +620,19 @@ select:focus-visible {
     radial-gradient(circle at 10% 18%, rgba(159, 70, 53, 0.06), transparent 24%);
 }
 
+.messages-inner {
+  position: relative;
+  width: 100%;
+}
+
+.message-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 1px 0;
+}
+
 .message-row {
   display: flex;
   margin: 12px 0;
@@ -705,6 +718,7 @@ select:focus-visible {
   position: relative;
   z-index: 1;
   display: flex;
+  flex-direction: column;
   align-items: end;
   gap: 8px;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
@@ -712,6 +726,13 @@ select:focus-visible {
   border-top: 1px solid var(--line);
   box-shadow: 0 -8px 24px rgba(55, 48, 38, 0.08);
   backdrop-filter: blur(12px);
+}
+
+.composer-main {
+  display: flex;
+  align-items: end;
+  width: 100%;
+  gap: 8px;
 }
 
 .composer::before {
@@ -761,12 +782,49 @@ select:focus-visible {
   background: var(--accent-dark);
 }
 
+.send:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .send:active {
   transform: translateY(1px);
 }
 
 .send svg {
   width: 19px;
+}
+
+.token-usage {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.token-usage strong {
+  padding: 2px 6px;
+  color: var(--bamboo-600);
+  background: var(--success-surface);
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.token-usage.warning strong {
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+}
+
+.token-usage.blocked strong {
+  color: var(--cinnabar-700);
+  background: var(--error-surface);
+}
+
+.token-usage small {
+  margin-left: auto;
+  color: var(--muted);
 }
 
 .settings {
@@ -979,6 +1037,23 @@ select:focus-visible {
   font-weight: 700;
 }
 
+.error-fallback {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  min-height: 100dvh;
+  padding: 24px;
+  color: var(--text);
+  background: var(--bg);
+  text-align: center;
+}
+
+.error-fallback p {
+  max-width: 32rem;
+  color: var(--muted);
+}
+
 [data-theme='dark'] {
   --paper-50: #33342f;
   --paper-100: #282925;
@@ -1188,5 +1263,15 @@ html[data-theme='dark'] .composer {
 
   .split {
     grid-template-columns: 1fr;
+  }
+
+  .token-usage {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .token-usage small {
+    width: 100%;
+    margin-left: 0;
   }
 }
