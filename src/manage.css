@@ -76,7 +76,7 @@
 .manage-row button:hover {
   color: var(--accent-dark);
   background: var(--paper-50);
-  border-color: var(--accent-200, var(--cinnabar-200));
+  border-color: var(--cinnabar-200);
 }
 
 .manage-row button svg {
