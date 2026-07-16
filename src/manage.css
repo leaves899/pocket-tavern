@@ -1,5 +1,237 @@
-.inline-form{display:flex;gap:8px}.inline-form input{min-width:0;flex:1;margin:0!important}.inline-form .primary{flex:none}.persona-form{display:grid;gap:8px}.persona-form input,.persona-form textarea{margin:0!important}.manage-row{display:flex;align-items:center;gap:6px;border-top:1px solid var(--line);padding-top:10px}.manage-row>span{display:flex;flex-direction:column;min-width:0;flex:1}.manage-row small{color:var(--muted);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.manage-row button{border:0;background:var(--bg);border-radius:5px;min-height:34px;padding:6px 9px;font-size:12px}.manage-row button svg{width:15px;height:15px}.manage-row em{font-style:normal;font-size:10px;color:var(--accent);background:var(--accent-soft);padding:2px 5px;border-radius:3px;margin-left:6px}.persona-row>span{max-width:55%}
-.worldbook-form{display:grid;gap:8px}.worldbook-form input,.worldbook-form textarea{margin:0!important}.worldbook-form>label input{margin-bottom:0!important}.worldbook-characters{display:flex;flex-wrap:wrap;gap:6px}.worldbook-characters small{width:100%;margin:0!important}.worldbook-characters label{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:400;background:var(--bg);border-radius:5px;padding:6px 8px}.worldbook-characters input{width:auto!important;margin:0!important}.worldbook-row>span{max-width:48%}
-.worldbook-transfer{display:grid;grid-template-columns:1fr 1fr;gap:8px}.worldbook-transfer button{min-height:38px;border:0;background:var(--bg);border-radius:5px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px}.worldbook-transfer button svg{width:15px;height:15px}.worldbook-transfer small{grid-column:1/-1}
-@media(max-width:420px){.inline-form{display:grid}.inline-form .primary{justify-content:center}.manage-row{flex-wrap:wrap}.persona-row>span,.worldbook-row>span{max-width:100%;flex-basis:100%}}
-.notice span{flex:1}.notice button{display:flex;align-items:center;gap:4px;border:0;background:transparent;color:inherit;font-weight:650}.notice button svg{width:15px}
+.inline-form {
+  display: flex;
+  gap: 8px;
+}
+
+.inline-form input {
+  min-width: 0;
+  flex: 1;
+  margin: 0 !important;
+}
+
+.inline-form .primary {
+  flex: none;
+}
+
+.persona-form {
+  display: grid;
+  gap: 8px;
+}
+
+.persona-form input,
+.persona-form textarea {
+  margin: 0 !important;
+}
+
+.manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 4px 0 10px;
+  background: var(--surface-subtle);
+  border-top: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.manage-row:hover {
+  background: var(--surface-hover);
+  border-left-color: var(--accent);
+}
+
+.manage-row > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.manage-row strong {
+  color: var(--ink-800);
+  font-family: var(--heading-font);
+  font-size: 15px;
+}
+
+.manage-row small {
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: 400;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manage-row button {
+  min-height: 34px;
+  padding: 6px 9px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.manage-row button:hover {
+  color: var(--accent-dark);
+  background: var(--paper-50);
+  border-color: var(--accent-200, var(--cinnabar-200));
+}
+
+.manage-row button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.manage-row em {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 5px;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  border: 1px solid var(--cinnabar-200);
+  border-radius: 3px;
+  font-size: 10px;
+  font-style: normal;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+.persona-row > span {
+  max-width: 55%;
+}
+
+.worldbook-form {
+  display: grid;
+  gap: 8px;
+}
+
+.worldbook-form input,
+.worldbook-form textarea {
+  margin: 0 !important;
+}
+
+.worldbook-form > label input {
+  margin-bottom: 0 !important;
+}
+
+.worldbook-characters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.worldbook-characters small {
+  width: 100%;
+  margin: 0 !important;
+}
+
+.worldbook-characters label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.worldbook-characters label:has(input:checked) {
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  border-color: var(--cinnabar-200);
+}
+
+.worldbook-characters input {
+  width: auto !important;
+  margin: 0 !important;
+  accent-color: var(--accent);
+}
+
+.worldbook-row > span {
+  max-width: 48%;
+}
+
+.worldbook-transfer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.worldbook-transfer button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  gap: 6px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.worldbook-transfer button:hover {
+  color: var(--accent-dark);
+  background: var(--paper-50);
+  border-color: var(--cinnabar-200);
+}
+
+.worldbook-transfer button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.worldbook-transfer small {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 420px) {
+  .inline-form {
+    display: grid;
+  }
+
+  .inline-form .primary {
+    justify-content: center;
+  }
+
+  .manage-row {
+    flex-wrap: wrap;
+  }
+
+  .persona-row > span,
+  .worldbook-row > span {
+    max-width: 100%;
+    flex-basis: 100%;
+  }
+
+  .worldbook-transfer {
+    grid-template-columns: 1fr;
+  }
+
+  .worldbook-transfer small {
+    grid-column: auto;
+  }
+}
+
+.notice span {
+  flex: 1;
+}
+
+.notice button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font-weight: 650;
+}
+
+.notice button svg {
+  width: 15px;
+}
